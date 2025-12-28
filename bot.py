@@ -5,218 +5,145 @@ from pyrogram.types import Message
 
 from config import *
 from database import *
-from permissions import OWNER_PERMISSIONS
 
 logging.basicConfig(level=logging.INFO)
 
-app = Client(
-    "chmasta",
+# 🤖 Bot client (commands)
+bot = Client(
+    "chmasta_bot",
     api_id=API_ID,
     api_hash=API_HASH,
     bot_token=BOT_TOKEN
 )
 
+# 👤 User client (DELETION ENGINE)
+user = Client(
+    "chmasta_user",
+    api_id=API_ID,
+    api_hash=API_HASH,
+    session_string=STRING_SESSION
+)
+
 init_main_owner()
+
 
 # -------------------------------------------------
 # HELPERS
 # -------------------------------------------------
-def is_owner(user_id: int) -> bool:
+def is_owner(user_id):
     return user_id in get_owners()
 
 
-def owner_filter(_, __, message: Message):
-    if not message.from_user:
-        return False
-    return is_owner(message.from_user.id)
+def owner_filter(_, __, m):
+    return m.from_user and is_owner(m.from_user.id)
 
 
 OWNER = filters.create(owner_filter)
 
 
-async def alert_owners(text: str):
-    for owner in get_owners():
-        try:
-            await app.send_message(owner, f"⚠️ **Chmasta Alert**\n{text}")
-        except:
-            pass
-
-
 # -------------------------------------------------
-# START
+# START / HELP
 # -------------------------------------------------
-@app.on_message(filters.private & filters.command("start"))
+@bot.on_message(filters.private & filters.command("start"))
 async def start(_, m):
-    await app.send_photo(
-        m.chat.id,
+    await m.reply_photo(
         START_IMAGE,
-        caption=(
-            "✨ **Welcome to Chmasta** ✨\n\n"
-            "I auto-delete messages from selected admins "
-            "in your channels after a custom delay ⏱\n\n"
-            "📌 Configure everything from private chat\n"
-            "📘 Use /help to get started\n\n"
-            "🚀 Bot is running smoothly!"
-        )
+        caption="✨ **Chmasta is live!**\n\nUse /help to configure channels."
     )
 
-
-# -------------------------------------------------
-# HELP
-# -------------------------------------------------
-@app.on_message(filters.private & filters.command("help"))
+@bot.on_message(filters.private & filters.command("help"))
 async def help_cmd(_, m):
     await m.reply(
-        "📘 **Chmasta Commands**\n\n"
-        "/settime `<channel_id> <seconds>` ⏱\n"
-        "/whitelist `<channel_id> <user_id>` ✅\n"
-        "/unwhitelist `<channel_id> <user_id>` ❌\n"
-        "/owners 👑\n"
-        "/addowner `<user_id>` ➕ (main owner)\n"
-        "/removeowner `<user_id>` ➖ (main owner)\n"
-        "/logs 📊\n\n"
-        "⚠ Bot must be admin with delete permission"
+        "📘 **Commands**\n\n"
+        "/channel <channel_id> – verify channel\n"
+        "/channels – list channels\n"
+        "/settime <channel_id> <seconds>\n"
+        "/whitelist <channel_id> <user_id>\n"
     )
 
 
 # -------------------------------------------------
-# SET TIMER (PER CHANNEL)
+# CHANNEL VERIFICATION
 # -------------------------------------------------
-@app.on_message(filters.private & filters.command("settime") & OWNER)
+@bot.on_message(filters.private & filters.command("channel") & OWNER)
+async def channel_verify(_, m):
+    if len(m.command) < 2:
+        return await m.reply("❌ Usage: /channel <channel_id>")
+
+    cid = int(m.command[1])
+    verify_channel(cid)
+    log_action("CHANNEL_VERIFY", m.from_user.id, cid)
+
+    await m.reply("✅ Channel verified & synced")
+
+
+@bot.on_message(filters.private & filters.command("channels") & OWNER)
+async def channels_cmd(_, m):
+    chs = get_channels()
+    if not chs:
+        return await m.reply("📭 No channels added")
+
+    text = "📡 **Managed Channels**\n\n"
+    for c in chs:
+        text += f"• `{c['channel_id']}`\n"
+    await m.reply(text)
+
+
+# -------------------------------------------------
+# TIMER / WHITELIST
+# -------------------------------------------------
+@bot.on_message(filters.private & filters.command("settime") & OWNER)
 async def settime(_, m):
     if len(m.command) < 3:
-        return await m.reply(
-            "❌ **Usage:**\n"
-            "`/settime <channel_id> <seconds>`\n\n"
-            "Example:\n"
-            "`/settime -1001234567890 3600`"
-        )
+        return await m.reply("❌ /settime <channel_id> <seconds>")
 
-    channel_id = int(m.command[1])
-    seconds = int(m.command[2])
+    cid = int(m.command[1])
+    sec = int(m.command[2])
 
-    set_timer(channel_id, seconds)
-    log_action("SET_TIMER", m.from_user.id, channel_id, str(seconds))
+    set_timer(cid, sec)
+    log_action("SET_TIMER", m.from_user.id, cid, sec)
 
-    await m.reply(f"⏱ Auto-delete set to `{seconds}` seconds")
+    await m.reply(f"⏱ Timer set to {sec}s")
 
 
-# -------------------------------------------------
-# WHITELIST ADMIN
-# -------------------------------------------------
-@app.on_message(filters.private & filters.command("whitelist") & OWNER)
+@bot.on_message(filters.private & filters.command("whitelist") & OWNER)
 async def whitelist(_, m):
     if len(m.command) < 3:
-        return await m.reply(
-            "❌ **Usage:**\n"
-            "`/whitelist <channel_id> <user_id>`\n\n"
-            "Example:\n"
-            "`/whitelist -1001234567890 123456789`"
-        )
+        return await m.reply("❌ /whitelist <channel_id> <user_id>")
 
-    channel_id = int(m.command[1])
-    user_id = int(m.command[2])
+    cid = int(m.command[1])
+    uid = int(m.command[2])
 
-    add_admin(channel_id, user_id)
-    log_action("ADMIN_ADD", m.from_user.id, channel_id, str(user_id))
+    add_admin(cid, uid)
+    log_action("ADMIN_ADD", m.from_user.id, cid, uid)
 
-    await m.reply("✅ Admin whitelisted for this channel")
-
-
-@app.on_message(filters.private & filters.command("unwhitelist") & OWNER)
-async def unwhitelist(_, m):
-    if len(m.command) < 3:
-        return await m.reply(
-            "❌ **Usage:**\n"
-            "`/unwhitelist <channel_id> <user_id>`"
-        )
-
-    channel_id = int(m.command[1])
-    user_id = int(m.command[2])
-
-    remove_admin(channel_id, user_id)
-    log_action("ADMIN_REMOVE", m.from_user.id, channel_id, str(user_id))
-
-    await m.reply("❌ Admin removed from this channel")
+    await m.reply("✅ Admin whitelisted")
 
 
 # -------------------------------------------------
-# OWNERS
+# AUTO DELETE (USER SESSION – WORKS)
 # -------------------------------------------------
-@app.on_message(filters.private & filters.command("owners") & OWNER)
-async def owners_cmd(_, m):
-    text = "👑 **Bot Owners**\n\n"
-    for o in get_owners():
-        badge = "⭐" if o == MAIN_OWNER_ID else ""
-        text += f"• `{o}` {badge}\n"
-    await m.reply(text)
-
-
-@app.on_message(filters.private & filters.command("addowner") & OWNER)
-async def addowner(_, m):
-    if m.from_user.id != MAIN_OWNER_ID:
-        return await m.reply("🚫 Only MAIN OWNER can add owners")
-
-    if len(m.command) < 2:
-        return await m.reply("❌ Usage: `/addowner <user_id>`")
-
-    uid = int(m.command[1])
-    add_owner(uid)
-    log_action("OWNER_ADD", m.from_user.id, details=str(uid))
-
-    await m.reply("➕ Owner added")
-
-
-@app.on_message(filters.private & filters.command("removeowner") & OWNER)
-async def removeowner(_, m):
-    if m.from_user.id != MAIN_OWNER_ID:
-        return await m.reply("🚫 Only MAIN OWNER can remove owners")
-
-    if len(m.command) < 2:
-        return await m.reply("❌ Usage: `/removeowner <user_id>`")
-
-    uid = int(m.command[1])
-    if not remove_owner(uid):
-        return await m.reply("❌ Cannot remove MAIN OWNER")
-
-    log_action("OWNER_REMOVE", m.from_user.id, details=str(uid))
-    await m.reply("➖ Owner removed")
-
-
-# -------------------------------------------------
-# LOGS
-# -------------------------------------------------
-@app.on_message(filters.private & filters.command("logs") & OWNER)
-async def logs_cmd(_, m):
-    data = logs.find().sort("time", -1).limit(10)
-    text = "📊 **Recent Logs**\n\n"
-    for d in data:
-        text += f"• `{d['action']}` → `{d.get('details','')}`\n"
-    await m.reply(text)
-
-
-# -------------------------------------------------
-# AUTO DELETE (CHANNEL SILENT HANDLER)
-# -------------------------------------------------
-@app.on_message(filters.channel)
+@user.on_message(filters.channel)
 async def auto_delete(_, m: Message):
-    if not m.from_user:
-        return
+    cid = m.chat.id
+    admins = get_admins(cid)
 
-    admins_list = get_admins(m.chat.id)
-    if m.from_user.id not in admins_list:
-        return
+    if m.from_user and m.from_user.id in admins:
+        timer = get_timer(cid, DEFAULT_DELETE_TIME)
+        await asyncio.sleep(timer)
 
-    timer = get_timer(m.chat.id, DEFAULT_DELETE_TIME)
-    await asyncio.sleep(timer)
-
-    try:
-        await m.delete()
-        log_action("MESSAGE_DELETED", m.from_user.id, m.chat.id, str(m.id))
-    except Exception as e:
-        log_action("DELETE_FAILED", m.from_user.id, m.chat.id, str(e))
-        await alert_owners(f"Failed to delete message `{m.id}` in `{m.chat.id}`")
+        try:
+            await user.delete_messages(cid, m.id)
+            log_action("MESSAGE_DELETED", m.from_user.id, cid, m.id)
+        except Exception as e:
+            log_action("DELETE_FAILED", None, cid, str(e))
 
 
-print("✅ Chmasta deployed successfully — running 24/7 🚀")
-app.run()
+# -------------------------------------------------
+# RUN BOTH
+# -------------------------------------------------
+print("✅ Chmasta fully operational 🚀")
+
+bot.start()
+user.start()
+bot.idle()
