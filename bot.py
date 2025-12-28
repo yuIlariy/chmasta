@@ -3,6 +3,7 @@ import logging
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
+from pyrogram import idle
 from config import *
 from database import *
 
@@ -146,4 +147,9 @@ print("✅ Chmasta fully operational 🚀")
 
 bot.start()
 user.start()
-bot.idle()
+
+print("🤖 Chmasta is running — press Ctrl+C to stop")
+idle()
+
+bot.stop()
+user.stop()
