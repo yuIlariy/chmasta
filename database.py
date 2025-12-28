@@ -19,31 +19,22 @@ def init_main_owner():
         upsert=True
     )
 
-
 def get_owners():
     data = owners.find_one({"_id": "owners"})
     return data["users"] if data else []
 
 
-def add_owner(user_id: int):
-    owners.update_one(
-        {"_id": "owners"},
-        {"$addToSet": {"users": user_id}},
+# ---------- CHANNELS ----------
+def verify_channel(channel_id: int):
+    channels.update_one(
+        {"channel_id": channel_id},
+        {"$set": {"verified": True}},
         upsert=True
     )
 
+def get_channels():
+    return list(channels.find({"verified": True}))
 
-def remove_owner(user_id: int):
-    if user_id == MAIN_OWNER_ID:
-        return False
-    owners.update_one(
-        {"_id": "owners"},
-        {"$pull": {"users": user_id}}
-    )
-    return True
-
-
-# ---------- CHANNEL TIMERS ----------
 def set_timer(channel_id: int, seconds: int):
     channels.update_one(
         {"channel_id": channel_id},
@@ -51,27 +42,18 @@ def set_timer(channel_id: int, seconds: int):
         upsert=True
     )
 
-
 def get_timer(channel_id: int, default: int):
     data = channels.find_one({"channel_id": channel_id})
     return data["timer"] if data else default
 
 
-# ---------- ADMIN WHITELIST ----------
+# ---------- ADMINS ----------
 def add_admin(channel_id: int, user_id: int):
     admins.update_one(
         {"channel_id": channel_id},
         {"$addToSet": {"admins": user_id}},
         upsert=True
     )
-
-
-def remove_admin(channel_id: int, user_id: int):
-    admins.update_one(
-        {"channel_id": channel_id},
-        {"$pull": {"admins": user_id}}
-    )
-
 
 def get_admins(channel_id: int):
     data = admins.find_one({"channel_id": channel_id})
@@ -87,3 +69,4 @@ def log_action(action, by, channel_id=None, details=None):
         "details": details,
         "time": datetime.utcnow()
     })
+    
