@@ -19,18 +19,21 @@ def init_main_owner():
         upsert=True
     )
 
+
 def get_owners():
     data = owners.find_one({"_id": "owners"})
     return data["users"] if data else []
 
-def add_owner(user_id):
+
+def add_owner(user_id: int):
     owners.update_one(
         {"_id": "owners"},
         {"$addToSet": {"users": user_id}},
         upsert=True
     )
 
-def remove_owner(user_id):
+
+def remove_owner(user_id: int):
     if user_id == MAIN_OWNER_ID:
         return False
     owners.update_one(
@@ -40,44 +43,47 @@ def remove_owner(user_id):
     return True
 
 
-# ---------- CHANNELS ----------
-def set_timer(chat_id, timer):
+# ---------- CHANNEL TIMERS ----------
+def set_timer(channel_id: int, seconds: int):
     channels.update_one(
-        {"chat_id": chat_id},
-        {"$set": {"timer": timer}},
+        {"channel_id": channel_id},
+        {"$set": {"timer": seconds}},
         upsert=True
     )
 
-def get_timer(chat_id, default):
-    data = channels.find_one({"chat_id": chat_id})
+
+def get_timer(channel_id: int, default: int):
+    data = channels.find_one({"channel_id": channel_id})
     return data["timer"] if data else default
 
 
-# ---------- ADMINS ----------
-def add_admin(chat_id, user_id):
+# ---------- ADMIN WHITELIST ----------
+def add_admin(channel_id: int, user_id: int):
     admins.update_one(
-        {"chat_id": chat_id},
+        {"channel_id": channel_id},
         {"$addToSet": {"admins": user_id}},
         upsert=True
     )
 
-def remove_admin(chat_id, user_id):
+
+def remove_admin(channel_id: int, user_id: int):
     admins.update_one(
-        {"chat_id": chat_id},
+        {"channel_id": channel_id},
         {"$pull": {"admins": user_id}}
     )
 
-def get_admins(chat_id):
-    data = admins.find_one({"chat_id": chat_id})
+
+def get_admins(channel_id: int):
+    data = admins.find_one({"channel_id": channel_id})
     return data["admins"] if data else []
 
 
 # ---------- LOGS ----------
-def log_action(action, by, chat_id=None, details=None):
+def log_action(action, by, channel_id=None, details=None):
     logs.insert_one({
         "action": action,
         "by": by,
-        "chat_id": chat_id,
+        "channel_id": channel_id,
         "details": details,
         "time": datetime.utcnow()
     })
